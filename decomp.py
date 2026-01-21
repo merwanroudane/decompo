@@ -114,30 +114,45 @@ st.markdown("""
 def decompose_variable(series: pd.Series, threshold: float = 0.0) -> tuple:
     """
     Decompose a variable into positive and negative partial sums
-    Based on Shin, Yu & Greenwood-Nimmo (2014) methodology
+    Based on Shin, Yu & Greenwood-Nimmo (2014) methodology - Equation 9.3
     
     x_t = x_0 + x_t^+ + x_t^-
     
     where:
-    x_t^+ = Σ max(Δx_j, 0) - partial sum of positive changes
-    x_t^- = Σ min(Δx_j, 0) - partial sum of negative changes
+    x_t^+ = Σ(j=1 to t) max(Δx_j, 0) - partial sum of positive changes
+    x_t^- = Σ(j=1 to t) min(Δx_j, 0) - partial sum of negative changes
+    
+    At t=0: x_0^+ = 0 and x_0^- = 0 (empty sum)
+    
+    Number of observations is preserved (same as original series)
     """
-    # Calculate first differences (changes)
-    delta_x = series.diff()
+    n = len(series)
     
-    # Calculate positive changes (above threshold)
-    delta_x_pos = delta_x.apply(lambda x: max(x - threshold, 0) if pd.notna(x) else np.nan)
+    # Initialize arrays with same length as original series
+    x_pos = pd.Series(np.zeros(n), index=series.index)
+    x_neg = pd.Series(np.zeros(n), index=series.index)
+    delta_x = pd.Series(np.zeros(n), index=series.index)
+    delta_x_pos = pd.Series(np.zeros(n), index=series.index)
+    delta_x_neg = pd.Series(np.zeros(n), index=series.index)
     
-    # Calculate negative changes (below threshold)
-    delta_x_neg = delta_x.apply(lambda x: min(x - threshold, 0) if pd.notna(x) else np.nan)
+    # At t=0: partial sums are 0, delta is 0 (no previous value)
+    # x_pos[0] = 0, x_neg[0] = 0, delta_x[0] = 0
     
-    # Calculate cumulative sums (partial sums)
-    x_pos = delta_x_pos.cumsum()
-    x_neg = delta_x_neg.cumsum()
-    
-    # Set first value to 0 (or initial value consideration)
-    x_pos.iloc[0] = 0
-    x_neg.iloc[0] = 0
+    # From t=1 onwards: calculate changes and cumulative sums
+    for t in range(1, n):
+        # Calculate change: Δx_t = x_t - x_(t-1)
+        change = series.iloc[t] - series.iloc[t-1]
+        delta_x.iloc[t] = change
+        
+        # Positive change (above threshold)
+        delta_x_pos.iloc[t] = max(change - threshold, 0)
+        
+        # Negative change (below threshold)  
+        delta_x_neg.iloc[t] = min(change - threshold, 0)
+        
+        # Cumulative sums (partial sums)
+        x_pos.iloc[t] = x_pos.iloc[t-1] + delta_x_pos.iloc[t]
+        x_neg.iloc[t] = x_neg.iloc[t-1] + delta_x_neg.iloc[t]
     
     return x_pos, x_neg, delta_x, delta_x_pos, delta_x_neg
 
